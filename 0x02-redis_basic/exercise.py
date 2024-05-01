@@ -4,6 +4,7 @@ import uuid
 import redis
 from typing import Union, Callable
 from functools import wraps
+import redis
 
 def count_calls(method: Callable) -> Callable:
     """decorator that takes a single method Callable args
@@ -36,6 +37,32 @@ def call_history(method: Callable) -> Callable:
         return output
 
     return wrapper
+
+def replay(fn: Callable):
+    """Display the history of calls of a particular function"""
+    redis_inst = redis.Redis()
+    funcName = fn.__qualname__
+    calls = redis_inst.get(funcName)
+    try:
+        calls = calls.decode('utf-8')
+    except Exception:
+        calls = 0
+    print(f'{funcName} was called {calls} times:')
+
+    inputs = redis_inst.lrange(funcName + ":inputs", 0, -1)
+    outputs = redis_inst.lrange(funcName + ":outputs", 0, -1)
+
+    for ins, oots in zip(inputs, outputs):
+        try:
+            ins = ins.decode('utf-8')
+        except Exception:
+            ins = ""
+        try:
+            outs = outs.decode('utf-8')
+        except Exception:
+            outs = ""
+
+        print(f'{funcName}(*{ins}) -> {outs}')
 
 class Cache():
     """Cache class with redis"""
@@ -81,3 +108,13 @@ class Cache():
         except Exception:
             parm = 0
         return parm
+
+cache = Cache()
+
+# Call the store method multiple times
+cache.store("foo")
+cache.store("bar")
+cache.store(42)
+
+# Use the replay function to display the history of calls of the store method
+replay(cache.store)
