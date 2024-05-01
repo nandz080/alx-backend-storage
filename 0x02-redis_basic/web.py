@@ -9,36 +9,34 @@ import redis
 import requests
 from functools import wraps
 
-redis_inst = redis.Redis()
+"""redis_inst = redis.Redis()"""
 
-
-def url_access_count(method):
-    """decorator for get_page function"""
-    @wraps(method)
-    def wrapper(url):
-        """wrapper function"""
-        key = "cached:" + url
-        cached_content = redis_inst.get(key)
-        if cached_content:
-            return cached_content.decode("utf-8")
-
-            # Get new content and update cache
-        count = "count:" + url
-        content = method(url)
-
-        redis_inst.incr(count)
-        redis_inst.set(key, content, ex=10)
-        redis_inst.expire(key, 10)
-        return content
-    return wrapper
-
-
-@url_access_count
 def get_page(url: str) -> str:
-    """obtain the HTML content of a particular"""
-    outputs = requests.get(url)
-    return outputs.text
+    """Fetches the HTML content of a URL and caches the result with an expiration time of 10 seconds."""
+    # Initialize Redis connection
+    r = redis.Redis()
 
+    # Increment the access count for the URL
+    r.incr(f"count:{url}")
 
+    # Check if the page content is cached
+    cached_content = r.get(url)
+    if cached_content:
+        return cached_content.decode("utf-8")
+
+    # Fetch the HTML content of the URL
+    response = requests.get(url)
+    if response.status_code == 200:
+        content = response.text
+
+        # Cache the page content with an expiration time of 10 seconds
+        r.setex(url, 10, content)
+
+        return content
+
+    return f"Error: Unable to fetch page content from {url}"
+
+# Test the function
 if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+    url = "http://slowwly.robertomurray.co.uk/delay/5000/url/http://www.google.com"
+    print(get_page(url))
